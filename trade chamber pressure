@@ -1,0 +1,282 @@
+%% trade_chamber_pressure.m
+% Rocket Engine Chamber Pressure Trade Study
+%
+% This script evaluates how chamber pressure affects ideal rocket
+% engine performance while holding all other engine parameters constant.
+%
+% Outputs:
+%   - Mass flow rate
+%   - Characteristic velocity
+%   - Exit Mach number
+%   - Exit temperature
+%   - Exit pressure
+%   - Exhaust velocity
+%   - Thrust
+%   - Specific impulse
+%   - Thrust coefficient
+
+clear;
+clc;
+close all;
+
+
+%% Fixed Engine Parameters, enter them here
+
+Tc = 3500;              % Chamber temperature [K]
+gamma = 1.2;            % Specific heat ratio [-]
+R = 355;                % Specific gas constant [J/(kg*K)]
+
+At = 0.01;              % Throat area [m^2]
+expansion_ratio = 20;   % Nozzle expansion ratio [-]
+Ae = expansion_ratio * At;  % Exit area [m^2]
+
+Pa = 101325;            % Ambient pressure [Pa]
+g0 = 9.80665;            % Standard gravitational acceleration [m/s^2]
+
+
+%% Chamber Pressure Sweep
+
+Pc_range = linspace(1e6, 20e6, 100);  % 1-20 MPa
+
+
+%% Output Arrays
+
+mdot = zeros(size(Pc_range));
+cstar = zeros(size(Pc_range));
+Me = zeros(size(Pc_range));
+Te = zeros(size(Pc_range));
+Pe = zeros(size(Pc_range));
+Ve = zeros(size(Pc_range));
+F = zeros(size(Pc_range));
+Isp = zeros(size(Pc_range));
+Cf = zeros(size(Pc_range));
+
+
+%% Performance Calculations
+
+for i = 1:length(Pc_range)
+
+    Pc = Pc_range(i);
+
+
+    % Characteristic Velocity
+   
+    cstar(i) = sqrt(R * Tc / gamma) / ...
+        (2 / (gamma + 1))^((gamma + 1) / (2 * (gamma - 1)));
+
+
+    % Choked Mass Flow Rate
+    
+    mdot(i) = Pc * At / sqrt(Tc) * sqrt(gamma / R) * ...
+        (2 / (gamma + 1))^((gamma + 1) / (2 * (gamma - 1)));
+
+
+    %--------------------------------------------------------------
+    % Exit Mach Number
+    %
+    % The area-Mach relation is solved numerically.
+    % A supersonic initial guess is used because the divergent
+    % section of the rocket nozzle operates on the supersonic branch.
+    %--------------------------------------------------------------
+
+    area_ratio_function = @(M) ...
+        (1 / M) * ...
+        ((2 / (gamma + 1)) * ...
+        (1 + (gamma - 1) / 2 * M^2))^...
+        ((gamma + 1) / (2 * (gamma - 1))) ...
+        - expansion_ratio;
+
+    Me(i) = fzero(area_ratio_function, 3);
+
+
+    %--------------------------------------------------------------
+    % Exit Temperature
+    %--------------------------------------------------------------
+
+    Te(i) = Tc / ...
+        (1 + (gamma - 1) / 2 * Me(i)^2);
+
+
+    %--------------------------------------------------------------
+    % Exit Pressure
+    %--------------------------------------------------------------
+
+    Pe(i) = Pc * ...
+        (1 + (gamma - 1) / 2 * Me(i)^2)^...
+        (-gamma / (gamma - 1));
+
+
+    %--------------------------------------------------------------
+    % Exit Velocity
+    %--------------------------------------------------------------
+
+    ae = sqrt(gamma * R * Te(i));
+
+    Ve(i) = Me(i) * ae;
+
+
+    %--------------------------------------------------------------
+    % Thrust
+    %
+    % F = momentum thrust + pressure thrust
+    %--------------------------------------------------------------
+
+    momentum_thrust = mdot(i) * Ve(i);
+
+    pressure_thrust = (Pe(i) - Pa) * Ae;
+
+    F(i) = momentum_thrust + pressure_thrust;
+
+
+    %--------------------------------------------------------------
+    % Specific Impulse
+    %--------------------------------------------------------------
+
+    Isp(i) = F(i) / (mdot(i) * g0);
+
+
+    %--------------------------------------------------------------
+    % Thrust Coefficient
+    %--------------------------------------------------------------
+
+    Cf(i) = F(i) / (Pc * At);
+
+end
+
+
+%% Display Results at 10 MPa
+
+% Find the result closest to the original baseline condition.
+[~, baseline_index] = min(abs(Pc_range - 10e6));
+
+fprintf('\n');
+fprintf('====================================================\n');
+fprintf('       ROCKET ENGINE PERFORMANCE TRADE STUDY       \n');
+fprintf('====================================================\n');
+
+fprintf('\nFixed Parameters:\n');
+fprintf('Chamber Temperature:       %.1f K\n', Tc);
+fprintf('Specific Heat Ratio:       %.3f\n', gamma);
+fprintf('Specific Gas Constant:     %.1f J/(kg*K)\n', R);
+fprintf('Throat Area:               %.4f m^2\n', At);
+fprintf('Expansion Ratio:           %.1f\n', expansion_ratio);
+fprintf('Exit Area:                 %.4f m^2\n', Ae);
+fprintf('Ambient Pressure:          %.1f kPa\n', Pa / 1000);
+
+fprintf('\nBaseline Case:\n');
+fprintf('Chamber Pressure:          %.2f MPa\n', ...
+    Pc_range(baseline_index) / 1e6);
+
+fprintf('Mass Flow Rate:             %.3f kg/s\n', ...
+    mdot(baseline_index));
+
+fprintf('Characteristic Velocity:    %.2f m/s\n', ...
+    cstar(baseline_index));
+
+fprintf('Exit Mach Number:            %.3f\n', ...
+    Me(baseline_index));
+
+fprintf('Exit Temperature:            %.2f K\n', ...
+    Te(baseline_index));
+
+fprintf('Exit Pressure:               %.2f kPa\n', ...
+    Pe(baseline_index) / 1000);
+
+fprintf('Exhaust Velocity:             %.2f m/s\n', ...
+    Ve(baseline_index));
+
+fprintf('Thrust:                       %.2f kN\n', ...
+    F(baseline_index) / 1000);
+
+fprintf('Specific Impulse:             %.2f s\n', ...
+    Isp(baseline_index));
+
+fprintf('Thrust Coefficient:           %.4f\n', ...
+    Cf(baseline_index));
+
+fprintf('\n====================================================\n');
+
+
+%% Plot 1: Thrust vs Chamber Pressure
+
+figure;
+
+plot(Pc_range / 1e6, F / 1000, 'LineWidth', 2);
+
+xlabel('Chamber Pressure [MPa]');
+ylabel('Thrust [kN]');
+title('Thrust vs. Chamber Pressure');
+
+grid on;
+
+
+%% Plot 2: Specific Impulse vs Chamber Pressure
+
+figure;
+
+plot(Pc_range / 1e6, Isp, 'LineWidth', 2);
+
+xlabel('Chamber Pressure [MPa]');
+ylabel('Specific Impulse [s]');
+title('Specific Impulse vs. Chamber Pressure');
+
+grid on;
+
+
+%% Plot 3: Mass Flow Rate vs Chamber Pressure
+
+figure;
+
+plot(Pc_range / 1e6, mdot, 'LineWidth', 2);
+
+xlabel('Chamber Pressure [MPa]');
+ylabel('Mass Flow Rate [kg/s]');
+title('Mass Flow Rate vs. Chamber Pressure');
+
+grid on;
+
+
+%% Plot 4: Characteristic Velocity vs Chamber Pressure
+
+figure;
+
+plot(Pc_range / 1e6, cstar, 'LineWidth', 2);
+
+xlabel('Chamber Pressure [MPa]');
+ylabel('Characteristic Velocity [m/s]');
+title('Characteristic Velocity vs. Chamber Pressure');
+
+grid on;
+
+
+%% Plot 5: Thrust Coefficient vs Chamber Pressure
+
+figure;
+
+plot(Pc_range / 1e6, Cf, 'LineWidth', 2);
+
+xlabel('Chamber Pressure [MPa]');
+ylabel('Thrust Coefficient [-]');
+title('Thrust Coefficient vs. Chamber Pressure');
+
+grid on;
+
+
+%% Plot 6: Exit Pressure vs Chamber Pressure
+
+figure;
+
+plot(Pc_range / 1e6, Pe / 1000, 'LineWidth', 2);
+hold on;
+
+yline(Pa / 1000, '--');
+
+xlabel('Chamber Pressure [MPa]');
+ylabel('Exit Pressure [kPa]');
+title('Exit Pressure vs. Chamber Pressure');
+
+legend('Exit Pressure', 'Ambient Pressure', 'Location', 'best');
+
+grid on;
+
+hold off;
