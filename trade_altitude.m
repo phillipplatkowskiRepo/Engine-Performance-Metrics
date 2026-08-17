@@ -1,11 +1,13 @@
 %% trade_altitude.m
 % Rocket Engine Performance vs. Altitude
 %
-% Calculates rocket engine performance as ambient pressure changes
-% with altitude.
+% Calculates rocket engine performance from sea level to 100 km
+% using a piecewise standard atmosphere model.
 %
 % Uses:
 %   rocket_performance.m
+%   standard_atmosphere.m
+
 
 clear;
 clc;
@@ -23,33 +25,16 @@ At = 0.01;              % Throat area [m^2]
 expansion_ratio = 20;   % Nozzle expansion ratio [-]
 
 
-%% Constants
-
-g0 = 9.80665;            % Standard gravity [m/s^2]
-
-R_air = 287.05;          % Air specific gas constant [J/(kg*K)]
-
-T0 = 288.15;             % Sea-level temperature [K]
-P0 = 101325;             % Sea-level pressure [Pa]
-
-L = 0.0065;              % Temperature lapse rate [K/m]
-
-
 %% Altitude Range
 
-altitude = linspace(0, 11000, 100);   % 0-11 km [m]
+altitude = linspace(0, 100e3, 200);    % 0-100 km [m]
 
 
-%% Atmospheric Pressure
+%% Preallocate Arrays
 
-temperature_at_altitude = T0 - L .* altitude;
-
-ambient_pressure = P0 .* ...
-    (temperature_at_altitude ./ T0) .^ ...
-    (g0 / (R_air * L));
-
-
-%% Preallocate Performance Arrays
+temperature = zeros(size(altitude));
+ambient_pressure = zeros(size(altitude));
+density = zeros(size(altitude));
 
 thrust = zeros(size(altitude));
 Isp = zeros(size(altitude));
@@ -57,24 +42,40 @@ exit_pressure = zeros(size(altitude));
 exhaust_velocity = zeros(size(altitude));
 
 
-%% Run Propulsion Model
+%% Calculate Performance at Each Altitude
 
 for i = 1:length(altitude)
 
-    Pa = ambient_pressure(i);
+    h = altitude(i);
+
+
+    % Atmospheric conditions
+
+    [temperature(i), ambient_pressure(i), density(i)] = ...
+        standard_atmosphere(h);
+
+
+    % Rocket performance
 
     performance = rocket_performance( ...
-        Pc, Tc, gamma, R, At, expansion_ratio, Pa);
+        Pc, Tc, gamma, R, At, expansion_ratio, ...
+        ambient_pressure(i));
+
+
+    % Store performance results
 
     thrust(i) = performance.F;
+
     Isp(i) = performance.Isp;
+
     exit_pressure(i) = performance.Pe;
+
     exhaust_velocity(i) = performance.Ve;
 
 end
 
 
-%% Plot 1: Ambient Pressure vs. Altitude
+%% Plot 1: Atmospheric Pressure vs. Altitude
 
 figure;
 
@@ -88,7 +89,35 @@ title('Atmospheric Pressure vs. Altitude');
 grid on;
 
 
-%% Plot 2: Thrust vs. Altitude
+%% Plot 2: Atmospheric Temperature vs. Altitude
+
+figure;
+
+plot(altitude / 1000, temperature, ...
+    'LineWidth', 2);
+
+xlabel('Altitude [km]');
+ylabel('Temperature [K]');
+title('Atmospheric Temperature vs. Altitude');
+
+grid on;
+
+
+%% Plot 3: Atmospheric Density vs. Altitude
+
+figure;
+
+plot(altitude / 1000, density, ...
+    'LineWidth', 2);
+
+xlabel('Altitude [km]');
+ylabel('Density [kg/m^3]');
+title('Atmospheric Density vs. Altitude');
+
+grid on;
+
+
+%% Plot 4: Thrust vs. Altitude
 
 figure;
 
@@ -102,7 +131,7 @@ title('Rocket Engine Thrust vs. Altitude');
 grid on;
 
 
-%% Plot 3: Specific Impulse vs. Altitude
+%% Plot 5: Specific Impulse vs. Altitude
 
 figure;
 
@@ -111,12 +140,12 @@ plot(altitude / 1000, Isp, ...
 
 xlabel('Altitude [km]');
 ylabel('Specific Impulse [s]');
-title('Specific Impulse vs. Altitude');
+title('Rocket Engine Specific Impulse vs. Altitude');
 
 grid on;
 
 
-%% Plot 4: Exit Pressure vs. Altitude
+%% Plot 6: Exit Pressure vs. Ambient Pressure
 
 figure;
 
@@ -140,7 +169,7 @@ grid on;
 hold off;
 
 
-%% Plot 5: Exhaust Velocity vs. Altitude
+%% Plot 7: Exhaust Velocity vs. Altitude
 
 figure;
 
